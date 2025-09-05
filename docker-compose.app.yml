@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Using existing PostgreSQL with urlshortener user (trust auth - no password)
+      DATABASE_URL: "postgresql://urlshortener@host.docker.internal:5432/wedding_photos?schema=public"
+      # Using existing Redis
+      REDIS_URL: "redis://host.docker.internal:6379"
+      NODE_ENV: "production"
+      # Add your GCS credentials here or use .env file
+      GCS_PROJECT_ID: ${GCS_PROJECT_ID}
+      GCS_BUCKET_NAME: ${GCS_BUCKET_NAME}
+      GCS_CLIENT_EMAIL: ${GCS_CLIENT_EMAIL}
+      GCS_PRIVATE_KEY: ${GCS_PRIVATE_KEY}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+    volumes:
+      - ./uploads:/app/uploads  # Local uploads directory (backup)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # For accessing host services from container

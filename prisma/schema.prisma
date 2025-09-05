@@ -1,0 +1,173 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Events (Weddings)
+model Event {
+  id              String    @id @default(cuid())
+  name            String
+  description     String?
+  date            DateTime
+  venue           String?
+  organizerName   String?
+  organizerEmail  String?
+  organizerPhone  String?
+  passcode        String?   // Optional passcode for event
+  isActive        Boolean   @default(true)
+  maxUploadSize   Int       @default(10485760) // 10MB default
+  allowedFormats  String[]  @default(["image/jpeg", "image/png", "image/webp", "image/heic"])
+  storageQuota    BigInt    @default(10737418240) // 10GB default
+  storageUsed     BigInt    @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  guests          Guest[]
+  photos          Photo[]
+  tables          Table[]
+}
+
+// Tables at the event
+model Table {
+  id              String    @id @default(cuid())
+  eventId         String
+  tableNumber     String
+  tableName       String?
+  qrCode          String    @unique // Unique QR code for each table
+  createdAt       DateTime  @default(now())
+  
+  event           Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guests          Guest[]
+}
+
+// Guests who upload photos
+model Guest {
+  id              String    @id @default(cuid())
+  eventId         String
+  name            String
+  phone           String?
+  email           String?
+  tableId         String?
+  authenticatedAt DateTime?
+  uploadCount     Int       @default(0)
+  totalSize       BigInt    @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  event           Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  table           Table?    @relation(fields: [tableId], references: [id])
+  photos          Photo[]
+  sessions        Session[]
+  
+  @@unique([eventId, phone])
+  @@unique([eventId, email])
+  @@index([eventId, name])
+}
+
+// Photos uploaded by guests
+model Photo {
+  id              String    @id @default(cuid())
+  eventId         String
+  guestId         String
+  fileName        String
+  originalName    String
+  mimeType        String
+  size            BigInt
+  width           Int?
+  height          Int?
+  cloudPath       String    // Path in Google Cloud Storage
+  cloudUrl        String?   // Direct URL to the photo
+  thumbnailPath   String?   // Path to thumbnail in GCS
+  thumbnailUrl    String?   // Direct URL to thumbnail
+  uploadStatus    UploadStatus @default(PENDING)
+  uploadProgress  Float     @default(0)
+  metadata        Json?     // Additional metadata (EXIF, etc.)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  event           Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  guest           Guest     @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  uploadChunks    UploadChunk[]
+  
+  @@index([eventId, guestId])
+  @@index([uploadStatus])
+}
+
+// Upload chunks for resumable uploads
+model UploadChunk {
+  id              String    @id @default(cuid())
+  photoId         String
+  chunkNumber     Int
+  size            BigInt
+  uploadedAt      DateTime?
+  etag            String?   // For multipart upload verification
+  
+  photo           Photo     @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  
+  @@unique([photoId, chunkNumber])
+}
+
+// Guest sessions
+model Session {
+  id              String    @id @default(cuid())
+  guestId         String
+  token           String    @unique
+  ipAddress       String?
+  userAgent       String?
+  expiresAt       DateTime
+  createdAt       DateTime  @default(now())
+  
+  guest           Guest     @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  
+  @@index([token])
+  @@index([expiresAt])
+}
+
+// Admin users
+model Admin {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  name            String
+  passwordHash    String
+  role            AdminRole @default(VIEWER)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+// OTP Verification
+model OTPVerification {
+  id              String    @id @default(cuid())
+  phone           String
+  otp             String
+  eventId         String
+  attempts        Int       @default(0)
+  expiresAt       DateTime
+  createdAt       DateTime  @default(now())
+  
+  @@unique([phone, eventId])
+  @@index([expiresAt])
+}
+
+// Enums
+enum UploadStatus {
+  PENDING
+  UPLOADING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  EDITOR
+  VIEWER
+}

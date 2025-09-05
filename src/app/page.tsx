@@ -1,103 +1,192 @@
-import Image from "next/image";
+'use client'
+
+import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { GuestAuth } from '@/components/guest-auth'
+import { PhotoUpload } from '@/components/photo-upload'
+import { Heart, Camera, Sparkles } from 'lucide-react'
+import Confetti from 'react-confetti'
+
+interface GuestInfo {
+  name: string
+  phone?: string
+  email?: string
+  tableId?: string
+}
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [step, setStep] = useState<'auth' | 'upload' | 'success'>('auth')
+  const [guestInfo, setGuestInfo] = useState<GuestInfo | null>(null)
+  const [uploadedCount, setUploadedCount] = useState(0)
+  const [showConfetti, setShowConfetti] = useState(false)
+  const [eventId, setEventId] = useState<string>('')
+  const [tableId, setTableId] = useState<string | undefined>()
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+  useEffect(() => {
+    // Parse URL parameters (from QR code scan)
+    const params = new URLSearchParams(window.location.search)
+    const event = params.get('event') || 'default-event-id'
+    const table = params.get('table') || undefined
+    
+    setEventId(event)
+    setTableId(table)
+
+    // Check for existing session
+    const savedSession = localStorage.getItem('guestSession')
+    if (savedSession) {
+      try {
+        const session = JSON.parse(savedSession)
+        if (session.guest) {
+          setGuestInfo(session.guest)
+          setStep('upload')
+        }
+      } catch (error) {
+        console.error('Invalid session', error)
+      }
+    }
+  }, [])
+
+  const handleAuthenticated = (info: GuestInfo) => {
+    setGuestInfo(info)
+    setStep('upload')
+  }
+
+  const handleUploadComplete = (files: any[]) => {
+    setUploadedCount(prev => prev + files.length)
+    setShowConfetti(true)
+    setStep('success')
+    
+    // Hide confetti after 5 seconds
+    setTimeout(() => {
+      setShowConfetti(false)
+      setStep('upload') // Allow more uploads
+    }, 5000)
+  }
+
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
+      {/* Confetti Animation */}
+      {showConfetti && (
+        <Confetti
+          width={window.innerWidth}
+          height={window.innerHeight}
+          recycle={false}
+          numberOfPieces={500}
+          gravity={0.3}
+        />
+      )}
+
+      {/* Header */}
+      <div className="pt-8 pb-4 text-center">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="inline-flex items-center gap-2 px-6 py-3 bg-white rounded-full shadow-lg"
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+          <Heart className="w-6 h-6 text-pink-500" />
+          <span className="text-xl font-bold text-gray-800">
+            Sarah & John's Wedding
+          </span>
+          <Heart className="w-6 h-6 text-pink-500" />
+        </motion.div>
+        
+        <motion.p 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="mt-4 text-gray-600 text-lg"
         >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+          Share your memories with us! 📸
+        </motion.p>
+      </div>
+
+      {/* Main Content */}
+      <div className="container mx-auto px-4 py-8">
+        <AnimatePresence mode="wait">
+          {step === 'auth' && (
+            <motion.div
+              key="auth"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+            >
+              <GuestAuth
+                eventId={eventId}
+                tableId={tableId}
+                onAuthenticated={handleAuthenticated}
+              />
+            </motion.div>
+          )}
+
+          {step === 'upload' && guestInfo && (
+            <motion.div
+              key="upload"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+            >
+              <div className="text-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-800">
+                  Welcome, {guestInfo.name}! 👋
+                </h2>
+                <p className="text-gray-600 mt-2">
+                  {uploadedCount > 0 
+                    ? `You've shared ${uploadedCount} photo${uploadedCount > 1 ? 's' : ''}. Keep them coming!`
+                    : 'Ready to share your photos?'
+                  }
+                </p>
+              </div>
+              <PhotoUpload
+                eventId={eventId}
+                onUploadComplete={handleUploadComplete}
+              />
+            </motion.div>
+          )}
+
+          {step === 'success' && (
+            <motion.div
+              key="success"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="text-center py-20"
+            >
+              <motion.div
+                animate={{ 
+                  scale: [1, 1.2, 1],
+                  rotate: [0, 10, -10, 0]
+                }}
+                transition={{ 
+                  duration: 0.5,
+                  repeat: 2
+                }}
+                className="inline-block"
+              >
+                <div className="w-32 h-32 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Sparkles className="w-16 h-16 text-white" />
+                </div>
+              </motion.div>
+              
+              <h2 className="text-4xl font-bold text-gray-800 mb-4">
+                Thank You! 🎉
+              </h2>
+              <p className="text-xl text-gray-600">
+                Your photos have been uploaded successfully!
+              </p>
+              <p className="text-lg text-gray-500 mt-2">
+                Redirecting you back...
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Footer */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 text-center bg-white/80 backdrop-blur-sm">
+        <p className="text-sm text-gray-600">
+          Having trouble? Ask the wedding staff for help 💕
+        </p>
+      </div>
+    </main>
+  )
 }

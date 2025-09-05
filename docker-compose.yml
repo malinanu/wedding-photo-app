@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # Using existing PostgreSQL and Redis containers
+  # Uncomment below if you need to create new containers
+  # postgres:
+  #   image: postgres:15-alpine
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_USER: wedding_user
+  #     POSTGRES_PASSWORD: wedding_password
+  #     POSTGRES_DB: wedding_photos
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   networks:
+  #     - wedding_network
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U wedding_user"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - wedding_network
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Using existing PostgreSQL with urlshortener user - create wedding_photos database
+      DATABASE_URL: "postgresql://urlshortener:password@host.docker.internal:5432/wedding_photos?schema=public"
+      # Using existing Redis on default port
+      REDIS_URL: "redis://host.docker.internal:6379"
+      NODE_ENV: "production"
+      # Add your GCS credentials here or mount as secrets
+      GCS_PROJECT_ID: ${GCS_PROJECT_ID}
+      GCS_BUCKET_NAME: ${GCS_BUCKET_NAME}
+      GCS_CLIENT_EMAIL: ${GCS_CLIENT_EMAIL}
+      GCS_PRIVATE_KEY: ${GCS_PRIVATE_KEY}
+      NEXTAUTH_URL: ${NEXTAUTH_URL}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+    # Remove depends_on since we're using external containers
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+    #   redis:
+    #     condition: service_healthy
+    networks:
+      - wedding_network
+    volumes:
+      - ./uploads:/app/uploads  # Local uploads directory (backup)
+
+  # Optional: Nginx reverse proxy
+  # Uncomment this section if you want to use nginx as a reverse proxy
+  # Make sure nginx.conf exists as a file (not a directory)
+  # nginx:
+  #   image: nginx:alpine
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx.conf:/etc/nginx/nginx.conf:ro
+  #     # Create ssl directory with certificates before uncommenting
+  #     # - ./ssl:/etc/nginx/ssl:ro
+  #   depends_on:
+  #     - app
+  #   networks:
+  #     - wedding_network
+
+# Volumes not needed when using external containers
+# volumes:
+#   postgres_data:
+#   redis_data:
+
+networks:
+  wedding_network:
+    driver: bridge
