@@ -57,3 +57,10 @@ canvas-provider-*.json
 *.png
 *.gif
 test.txt
+
+# Unwanted files
+fix_postgres.ps1
+WARP.md
+UI.md
+README.md
+DOCKER_SETUP.md
