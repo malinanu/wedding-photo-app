@@ -1,13 +1,13 @@
 'use client'
 
-import React, { useCallback, useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Camera, Upload, X, Check, Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { cn, formatFileSize } from '@/lib/utils'
+import { Upload, Camera, X, Check, Loader2 } from 'lucide-react'
+import { Button } from './ui/button'
+import { cn } from '@/lib/utils'
+import { formatFileSize } from '@/lib/utils'
 import { ProgressiveUploadManager, UploadFile } from '@/lib/upload-manager'
-
 interface PhotoUploadProps {
   eventId?: string
   maxSize?: number
@@ -75,11 +75,36 @@ export function PhotoUpload({
   }
 
   const confirmAllUploads = async () => {
-    // This would normally get guest info from a form or session
-    const guestInfo = {
-      name: 'Guest User', // Would come from authentication
-      phone: '',
-      email: ''
+    const guestSession = localStorage.getItem('guestSession')
+    let token = ''
+    let guestId = ''
+    
+    if (guestSession) {
+      try {
+        const session = JSON.parse(guestSession)
+        // Try different token locations based on how it was stored
+        token = session.token || session.session?.token || ''
+        guestId = session.guest?.id || ''
+        
+        console.log('Session data:', {
+          hasToken: !!token,
+          hasGuestId: !!guestId,
+          tokenLength: token.length
+        })
+        
+        if (!token) {
+          console.error('No token found in session:', session)
+          alert('Session expired. Please refresh the page and login again.')
+          return
+        }
+      } catch (error) {
+        console.error('Failed to parse session:', error)
+        alert('Session expired. Please refresh the page and login again.')
+        return
+      }
+    } else {
+      alert('Session expired. Please refresh the page and login again.')
+      return
     }
     
     const completedUploads = []
@@ -87,69 +112,108 @@ export function PhotoUpload({
     for (const upload of uploads) {
       if (upload.status === 'compressed' || upload.status === 'pending') {
         try {
-          await uploadManager.completeUpload(upload.id, guestInfo)
-          completedUploads.push(upload)
+          // Upload to server
+          const formData = new FormData()
+          formData.append('file', upload.file)
+          formData.append('eventId', eventId || 'default-event-id')
+          formData.append('guestId', guestId)
+          
+          // Set token as cookie before making request
+          document.cookie = `guest-session=${token}; path=/; max-age=${3 * 24 * 60 * 60}` // 3 days
+          
+          const response = await fetch('/api/upload/simple', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            credentials: 'include', // Include cookies
+            body: formData,
+          })
+          
+          if (response.ok) {
+            const result = await response.json()
+            console.log('Upload successful:', result)
+            setUploads(prev => prev.map(u => 
+              u.id === upload.id ? { ...u, status: 'completed' } : u
+            ))
+            completedUploads.push({ ...upload, ...result })
+          } else {
+            const errorText = await response.text()
+            console.error('Upload response error:', response.status, errorText)
+            throw new Error(`Upload failed: ${response.status} - ${errorText}`)
+          }
         } catch (error) {
-          console.error('Failed to complete upload:', error)
+          console.error('Failed to upload:', error)
+          setUploads(prev => prev.map(u => 
+            u.id === upload.id ? { ...u, status: 'failed', error: error instanceof Error ? error.message : 'Upload failed' } : u
+          ))
         }
       }
     }
     
-    if (onUploadComplete) {
+    if (onUploadComplete && completedUploads.length > 0) {
       onUploadComplete(completedUploads)
     }
   }
 
+
   return (
-    <div className="w-full max-w-2xl mx-auto p-4">
-      {/* Dropzone */}
+    <div className="w-full max-w-2xl mx-auto">
+      {/* Header */}
+      <div className="text-center mb-8">
+        <h2 className="heading-font text-3xl font-semibold text-[var(--text-dark)] mb-2">
+          Upload Photos 📸
+        </h2>
+      </div>
+
+      {/* Main Upload Button - Dominates the screen */}
       <div
         {...getRootProps()}
         className={cn(
-          "relative border-3 border-dashed rounded-3xl p-12 text-center cursor-pointer transition-all duration-300",
-          isDragActive
-            ? "border-blue-500 bg-blue-50 scale-105"
-            : "border-gray-300 bg-gray-50 hover:border-gray-400 hover:bg-gray-100"
+          "relative cursor-pointer transition-all duration-300 mb-8",
+          isDragActive ? "scale-105" : "hover:scale-[1.02]"
         )}
       >
         <input {...getInputProps()} />
         
         <motion.div
           initial={{ scale: 1 }}
-          animate={{ scale: isDragActive ? 1.2 : 1 }}
+          animate={{ scale: isDragActive ? 1.05 : 1 }}
           transition={{ duration: 0.3 }}
-          className="flex flex-col items-center gap-4"
+          className="soft-texture rounded-2xl p-16 text-center shadow-lg"
         >
-          <div className="w-24 h-24 rounded-full bg-gradient-to-r from-blue-500 to-purple-600 flex items-center justify-center shadow-xl">
-            {isDragActive ? (
-              <Upload className="w-12 h-12 text-black animate-bounce" />
-            ) : (
-              <Camera className="w-12 h-12 text-black" />
-            )}
+          <div className={cn(
+            "w-32 h-32 mx-auto rounded-2xl flex items-center justify-center shadow-lg mb-6 transition-all duration-300",
+            isDragActive 
+              ? "bg-[var(--primary-accent)] scale-110" 
+              : "bg-[var(--primary-accent)] hover:shadow-xl"
+          )}>
+            <Camera className="w-16 h-16 text-white" />
           </div>
           
           <div>
-            <h3 className="text-2xl font-bold text-black mb-2">
-              {isDragActive ? "Drop photos here!" : "Add Your Photos"}
+            <h3 className="heading-font text-3xl font-semibold text-[var(--text-dark)] mb-4">
+              {isDragActive ? "Drop photos here!" : "Tap to Upload"}
             </h3>
-            <p className="text-black text-lg">
-              Drag & drop or tap to select
+            <p className="body-font text-lg text-[var(--text-dark)] opacity-80 mb-2">
+              Drag & drop or tap to select photos
             </p>
-            <p className="text-sm text-black/70 mt-2">
+            <p className="body-font text-sm text-[var(--text-dark)] opacity-60">
               Max {formatFileSize(maxSize)} per photo
             </p>
           </div>
         </motion.div>
       </div>
 
+
       {/* Upload Preview Grid */}
       {uploads.length > 0 && (
-        <div className="mt-8">
-          <h4 className="text-xl font-semibold mb-4">
-            Your Photos ({uploads.length})
+        <div>
+          <h4 className="heading-font text-xl font-semibold text-[var(--text-dark)] mb-6">
+            Your Photos
           </h4>
           
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-8">
             <AnimatePresence>
               {uploads.map(upload => (
                 <motion.div
@@ -159,7 +223,7 @@ export function PhotoUpload({
                   exit={{ opacity: 0, scale: 0.8 }}
                   className="relative group"
                 >
-                  <div className="relative aspect-square rounded-2xl overflow-hidden bg-gray-100 shadow-lg">
+                  <div className="relative aspect-square rounded-xl overflow-hidden bg-white shadow-md">
                     {upload.preview && (
                       <img
                         src={upload.preview}
@@ -171,26 +235,29 @@ export function PhotoUpload({
                     {/* Progress Overlay */}
                     {upload.status === 'uploading' && (
                       <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                        <div className="text-black text-center">
-                          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-2" />
-                          <span className="text-sm font-semibold">
-                            {upload.progress}%
-                          </span>
+                        <div className="text-white text-center">
+                          <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                          <div className="w-16 h-1 bg-white/30 rounded-full">
+                            <div 
+                              className="h-full bg-[var(--primary-accent)] rounded-full transition-all"
+                              style={{width: `${upload.progress}%`}}
+                            />
+                          </div>
                         </div>
                       </div>
                     )}
                     
                     {/* Status Badge */}
                     {upload.status === 'compressed' && (
-                      <div className="absolute top-2 right-2 bg-green-500 text-black rounded-full p-1">
-                        <Check className="w-4 h-4" />
+                      <div className="absolute top-2 right-2 bg-[var(--primary-accent)] text-white rounded-full p-1.5">
+                        <Check className="w-3 h-3" />
                       </div>
                     )}
                     
                     {upload.status === 'completed' && (
-                      <div className="absolute inset-0 bg-green-500/20 flex items-center justify-center">
-                        <div className="bg-green-500 text-black rounded-full p-3">
-                          <Check className="w-6 h-6" />
+                      <div className="absolute inset-0 bg-[var(--primary-accent)]/20 flex items-center justify-center">
+                        <div className="bg-[var(--primary-accent)] text-white rounded-full p-2">
+                          <Check className="w-5 h-5" />
                         </div>
                       </div>
                     )}
@@ -199,14 +266,13 @@ export function PhotoUpload({
                     {upload.status !== 'completed' && (
                       <button
                         onClick={() => removeUpload(upload.id)}
-                        className="absolute top-2 right-2 bg-red-500 text-black rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <X className="w-4 h-4" />
-                        <X className="w-4 h-4" />
+                        className="absolute top-2 left-2 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <X className="w-3 h-3" />
                       </button>
                     )}
                   </div>
                   
-                  <p className="mt-2 text-sm text-black truncate">
+                  <p className="body-font mt-2 text-sm text-[var(--text-dark)] opacity-70 truncate">
                     {upload.file.name}
                   </p>
                 </motion.div>
@@ -219,17 +285,15 @@ export function PhotoUpload({
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="mt-8 flex justify-center"
+              className="flex justify-center"
             >
-              <Button
-                size="jumbo"
-                variant="upload"
+              <button
                 onClick={confirmAllUploads}
-                className="shadow-2xl"
+                className="btn-primary px-8 py-4 text-lg font-medium rounded-xl shadow-xl flex items-center gap-3"
               >
-                <Upload className="w-8 h-8 mr-3" />
+                <Upload className="w-6 h-6" />
                 Upload All Photos
-              </Button>
+              </button>
             </motion.div>
           )}
         </div>

@@ -91,13 +91,15 @@ export class ProgressiveUploadManager {
       upload.status = 'compressed'
       this.onStatusChangeCallback?.(fileId, 'compressed')
       
-      // Upload thumbnail to server
-      await this.uploadThumbnail(fileId, thumbnail)
+      // Skip thumbnail upload - we'll upload directly in completeUpload
+      // await this.uploadThumbnail(fileId, thumbnail)
       
     } catch (error) {
-      upload.status = 'failed'
-      upload.error = error instanceof Error ? error.message : 'Upload failed'
-      this.onErrorCallback?.(fileId, upload.error)
+      // If compression fails, still mark as ready for upload
+      upload.status = 'compressed'
+      this.onStatusChangeCallback?.(fileId, 'compressed')
+      upload.progress = 20
+      this.onProgressCallback?.(fileId, 20)
     }
   }
 

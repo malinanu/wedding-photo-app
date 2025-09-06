@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
     // Create session
     const token = randomBytes(32).toString('hex')
     const expiresAt = new Date()
-    expiresAt.setHours(expiresAt.getHours() + 24) // 24 hour session
+    expiresAt.setDate(expiresAt.getDate() + 3) // 3 days session
 
     const session = await prisma.session.create({
       data: {
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     // Send welcome SMS (optional)
     // await smsService.sendWelcomeSMS(phone, name, `${process.env.NEXT_PUBLIC_APP_URL}?session=${token}`)
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: 'Phone verified successfully!',
       guest: {
@@ -92,8 +92,21 @@ export async function POST(request: NextRequest) {
       session: {
         token: session.token,
         expiresAt: session.expiresAt,
-      }
+      },
+      token: session.token,
+      expiresAt: session.expiresAt
     })
+    
+    // Set the session token as a cookie
+    response.cookies.set('guest-session', session.token, {
+      httpOnly: false, // Allow JavaScript access for now
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 3 * 24 * 60 * 60, // 3 days in seconds
+      path: '/'
+    })
+    
+    return response
   } catch (error) {
     console.error('Verify OTP error:', error)
     return NextResponse.json(

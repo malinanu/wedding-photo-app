@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker-compose logs:*)",
+      "Bash(npx prisma:*)",
+      "Bash(docker-compose exec:*)",
+      "Bash(docker cp:*)",
+      "Bash(curl:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker-compose:*)",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_click",
+      "Bash(find:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

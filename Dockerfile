@@ -52,10 +52,7 @@ USER nextjs
 EXPOSE 3000
 
 ENV PORT 3000
+ENV HOSTNAME "0.0.0.0"
 
-# Start script that runs migrations then starts the app
-COPY docker-entrypoint.sh ./
-RUN chmod +x docker-entrypoint.sh
-
-# Start the application
-CMD ["./docker-entrypoint.sh"]
+# Start the application directly (migrations will be run externally)
+CMD ["node", "server.js"]

@@ -35,20 +35,27 @@ class OTPService {
     const otp = this.generateOTP()
     const expiresAt = new Date(Date.now() + this.expiryMinutes * 60 * 1000)
 
-    // Store in database (you might want to create a separate OTP table)
-    // For now, we'll use a simple in-memory store or Redis
-    // In production, you should use Redis or a dedicated OTP table
-
-    // Temporary: Store as a session-like record
-    await prisma.$executeRaw`
-      INSERT INTO "OTPVerification" (phone, otp, "eventId", "expiresAt", attempts)
-      VALUES (${phone}, ${otp}, ${eventId}, ${expiresAt}, 0)
-      ON CONFLICT (phone, "eventId")
-      DO UPDATE SET 
-        otp = ${otp},
-        "expiresAt" = ${expiresAt},
-        attempts = 0
-    `
+    // Use Prisma's upsert method to handle both insert and update
+    await prisma.oTPVerification.upsert({
+      where: {
+        phone_eventId: {
+          phone,
+          eventId
+        }
+      },
+      update: {
+        otp,
+        expiresAt,
+        attempts: 0
+      },
+      create: {
+        phone,
+        otp,
+        eventId,
+        expiresAt,
+        attempts: 0
+      }
+    })
 
     return { otp, expiresAt }
   }
@@ -61,26 +68,22 @@ class OTPService {
     message: string
   }> {
     try {
-      // Get stored OTP
-      const storedOTP = await prisma.$queryRaw<{
-        otp: string
-        expiresAt: Date
-        attempts: number
-      }[]>`
-        SELECT otp, "expiresAt", attempts
-        FROM "OTPVerification"
-        WHERE phone = ${phone} AND "eventId" = ${eventId}
-        LIMIT 1
-      `
+      // Get stored OTP using Prisma method
+      const otpData = await prisma.oTPVerification.findUnique({
+        where: {
+          phone_eventId: {
+            phone,
+            eventId
+          }
+        }
+      })
 
-      if (!storedOTP || storedOTP.length === 0) {
+      if (!otpData) {
         return {
           success: false,
           message: 'OTP not found. Please request a new one.'
         }
       }
-
-      const otpData = storedOTP[0]
 
       // Check if OTP has expired
       if (new Date() > otpData.expiresAt) {
@@ -103,12 +106,20 @@ class OTPService {
 
       // Verify OTP
       if (otpData.otp !== otp) {
-        // Increment attempts
-        await prisma.$executeRaw`
-          UPDATE "OTPVerification"
-          SET attempts = attempts + 1
-          WHERE phone = ${phone} AND "eventId" = ${eventId}
-        `
+        // Increment attempts using Prisma method
+        await prisma.oTPVerification.update({
+          where: {
+            phone_eventId: {
+              phone,
+              eventId
+            }
+          },
+          data: {
+            attempts: {
+              increment: 1
+            }
+          }
+        })
         
         return {
           success: false,
@@ -137,10 +148,14 @@ class OTPService {
    */
   async deleteOTP(phone: string, eventId: string): Promise<void> {
     try {
-      await prisma.$executeRaw`
-        DELETE FROM "OTPVerification"
-        WHERE phone = ${phone} AND "eventId" = ${eventId}
-      `
+      await prisma.oTPVerification.delete({
+        where: {
+          phone_eventId: {
+            phone,
+            eventId
+          }
+        }
+      })
     } catch (error) {
       console.error('Failed to delete OTP:', error)
     }
@@ -154,21 +169,22 @@ class OTPService {
     waitTime?: number
   }> {
     try {
-      const recentOTP = await prisma.$queryRaw<{
-        createdAt: Date
-        expiresAt: Date
-      }[]>`
-        SELECT "createdAt", "expiresAt"
-        FROM "OTPVerification"
-        WHERE phone = ${phone} AND "eventId" = ${eventId}
-        LIMIT 1
-      `
+      const otpData = await prisma.oTPVerification.findUnique({
+        where: {
+          phone_eventId: {
+            phone,
+            eventId
+          }
+        },
+        select: {
+          createdAt: true,
+          expiresAt: true
+        }
+      })
 
-      if (!recentOTP || recentOTP.length === 0) {
+      if (!otpData) {
         return { canRequest: true }
       }
-
-      const otpData = recentOTP[0]
       const now = new Date()
       
       // Check if current OTP is still valid
@@ -192,10 +208,13 @@ class OTPService {
    */
   async cleanupExpiredOTPs(): Promise<void> {
     try {
-      await prisma.$executeRaw`
-        DELETE FROM "OTPVerification"
-        WHERE "expiresAt" < NOW()
-      `
+      await prisma.oTPVerification.deleteMany({
+        where: {
+          expiresAt: {
+            lt: new Date()
+          }
+        }
+      })
     } catch (error) {
       console.error('Failed to cleanup expired OTPs:', error)
     }

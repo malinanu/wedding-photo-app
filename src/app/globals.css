@@ -1,26 +1,72 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* UI.md Color Palette */
+  --primary-accent: #C2B280;
+  --secondary: #F5F5F5;
+  --text-dark: #333333;
+  --subtle-accent: #E7E1CC;
+  --background: #F5F5F5;
+  --foreground: #333333;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-primary-accent: var(--primary-accent);
+  --color-secondary: var(--secondary);
+  --color-text-dark: var(--text-dark);
+  --color-subtle-accent: var(--subtle-accent);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  line-height: 1.6;
+}
+
+.heading-font {
+  font-family: 'Playfair Display', serif;
+}
+
+.body-font {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Smooth transitions for better UX */
+* {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Focus styles following UI.md accent color */
+*:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-accent);
+}
+
+/* Button hover effects */
+.btn-primary {
+  background-color: var(--primary-accent);
+  color: white;
+  padding: 1rem 2rem;
+  border-radius: 0.75rem;
+  font-weight: 500;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  background-color: #B5A678;
+  box-shadow: 0 8px 15px -3px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+/* Soft textures for backgrounds */
+.soft-texture {
+  background-color: var(--secondary);
+  background-image: 
+    radial-gradient(circle at 1px 1px, rgba(255,255,255,0.5) 1px, transparent 0);
+  background-size: 20px 20px;
 }

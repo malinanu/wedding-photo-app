@@ -2,12 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { GuestAuth } from '@/components/guest-auth'
+import { GuestAuthOTPOnly } from '@/components/guest-auth-otp-only'
 import { PhotoUpload } from '@/components/photo-upload'
-import { Heart, Camera, Sparkles } from 'lucide-react'
+import { PhotoGallery } from '@/components/photo-gallery'
+import { Heart, Camera, Sparkles, LogOut, User, Clock, Upload, Images } from 'lucide-react'
 import Confetti from 'react-confetti'
+import { Button } from '@/components/ui/button'
 
 interface GuestInfo {
+  id: string
   name: string
   phone?: string
   email?: string
@@ -15,12 +18,14 @@ interface GuestInfo {
 }
 
 export default function Home() {
-  const [step, setStep] = useState<'auth' | 'upload' | 'success'>('auth')
+  const [step, setStep] = useState<'auth' | 'upload'>('auth')
   const [guestInfo, setGuestInfo] = useState<GuestInfo | null>(null)
   const [uploadedCount, setUploadedCount] = useState(0)
   const [showConfetti, setShowConfetti] = useState(false)
   const [eventId, setEventId] = useState<string>('')
   const [tableId, setTableId] = useState<string | undefined>()
+  const [sessionExpiry, setSessionExpiry] = useState<Date | null>(null)
+  const [activeTab, setActiveTab] = useState<'upload' | 'gallery'>('upload')
 
   useEffect(() => {
     // Parse URL parameters (from QR code scan)
@@ -36,69 +41,99 @@ export default function Home() {
     if (savedSession) {
       try {
         const session = JSON.parse(savedSession)
-        if (session.guest) {
-          setGuestInfo(session.guest)
-          setStep('upload')
+        // Check if session is expired
+        if (session.expiresAt && new Date(session.expiresAt) > new Date()) {
+          if (session.guest) {
+            setGuestInfo(session.guest)
+            setSessionExpiry(new Date(session.expiresAt))
+            setStep('upload')
+          }
+        } else {
+          // Session expired, clear it
+          localStorage.removeItem('guestSession')
+          console.log('Session expired, please login again')
         }
       } catch (error) {
         console.error('Invalid session', error)
+        localStorage.removeItem('guestSession')
       }
     }
   }, [])
 
   const handleAuthenticated = (info: GuestInfo) => {
     setGuestInfo(info)
+    // Set session expiry to 3 days from now
+    const expiry = new Date()
+    expiry.setDate(expiry.getDate() + 3)
+    setSessionExpiry(expiry)
     setStep('upload')
+  }
+  
+  const handleLogout = () => {
+    localStorage.removeItem('guestSession')
+    setGuestInfo(null)
+    setSessionExpiry(null)
+    setStep('auth')
+    setUploadedCount(0)
+  }
+  
+  // Format remaining session time
+  const getSessionTimeRemaining = () => {
+    if (!sessionExpiry) return null
+    const now = new Date()
+    const diff = sessionExpiry.getTime() - now.getTime()
+    if (diff <= 0) return 'Expired'
+    
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+    
+    if (days > 0) {
+      return `${days} day${days > 1 ? 's' : ''} ${hours} hour${hours > 1 ? 's' : ''}`
+    }
+    return `${hours} hour${hours > 1 ? 's' : ''}`
   }
 
   const handleUploadComplete = (files: any[]) => {
     setUploadedCount(prev => prev + files.length)
     setShowConfetti(true)
-    setStep('success')
     
-    // Hide confetti after 5 seconds
+    // Show success briefly then switch to gallery
     setTimeout(() => {
       setShowConfetti(false)
-      setStep('upload') // Allow more uploads
-    }, 5000)
+      setActiveTab('gallery') // Switch to gallery to show uploaded photos
+    }, 3000)
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
+    <main className="min-h-screen soft-texture">
       {/* Confetti Animation */}
       {showConfetti && (
         <Confetti
           width={window.innerWidth}
           height={window.innerHeight}
           recycle={false}
-          numberOfPieces={500}
-          gravity={0.3}
+          numberOfPieces={200}
+          gravity={0.2}
+          colors={['#C2B280', '#E7E1CC', '#F5F5F5']}
         />
       )}
 
-      {/* Header */}
-      <div className="pt-8 pb-4 text-center">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-white rounded-full shadow-lg"
-        >
-          <Heart className="w-6 h-6 text-pink-500" />
-          <span className="text-xl font-bold text-gray-800">
-            Sarah & John's Wedding
-          </span>
-          <Heart className="w-6 h-6 text-pink-500" />
-        </motion.div>
-        
-        <motion.p 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          className="mt-4 text-gray-600 text-lg"
-        >
-          Share your memories with us! 📸
-        </motion.p>
-      </div>
+      {/* Header - Simple and elegant */}
+      {step === 'upload' && (
+        <div className="pt-6 pb-4 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            <h1 className="heading-font text-3xl font-semibold text-[var(--text-dark)] mb-2">
+              Sarah & John's Wedding
+            </h1>
+            <p className="body-font text-[var(--text-dark)] opacity-70">
+              Share your memories with us
+            </p>
+          </motion.div>
+        </div>
+      )}
 
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
@@ -110,7 +145,7 @@ export default function Home() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
             >
-              <GuestAuth
+              <GuestAuthOTPOnly
                 eventId={eventId}
                 tableId={tableId}
                 onAuthenticated={handleAuthenticated}
@@ -125,66 +160,97 @@ export default function Home() {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
             >
-              <div className="text-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800">
-                  Welcome, {guestInfo.name}! 👋
-                </h2>
-                <p className="text-gray-600 mt-2">
-                  {uploadedCount > 0 
-                    ? `You've shared ${uploadedCount} photo${uploadedCount > 1 ? 's' : ''}. Keep them coming!`
-                    : 'Ready to share your photos?'
-                  }
-                </p>
+              {/* User Info Bar - Simplified */}
+              <div className="bg-white rounded-xl shadow-sm p-4 mb-8">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="heading-font text-lg font-medium text-[var(--text-dark)]">{guestInfo.name}</h3>
+                    <div className="body-font flex items-center gap-2 text-sm text-[var(--text-dark)] opacity-60 mt-1">
+                      <Clock className="w-3 h-3" />
+                      <span>Session valid for {getSessionTimeRemaining()}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="body-font px-3 py-2 text-sm font-medium text-[var(--text-dark)] bg-white border border-gray-200 rounded-lg hover:bg-[var(--subtle-accent)] transition-all flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </div>
               </div>
-              <PhotoUpload
-                eventId={eventId}
-                onUploadComplete={handleUploadComplete}
-              />
+
+              {/* Tab Navigation - Clean design */}
+              <div className="bg-white rounded-xl shadow-sm mb-8 p-1">
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setActiveTab('upload')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg transition-all ${
+                      activeTab === 'upload'
+                        ? 'bg-[var(--primary-accent)] text-white shadow-sm'
+                        : 'text-[var(--text-dark)] hover:bg-[var(--subtle-accent)]'
+                    }`}
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span className="body-font font-medium">Upload</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('gallery')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg transition-all ${
+                      activeTab === 'gallery'
+                        ? 'bg-[var(--primary-accent)] text-white shadow-sm'
+                        : 'text-[var(--text-dark)] hover:bg-[var(--subtle-accent)]'
+                    }`}
+                  >
+                    <Images className="w-4 h-4" />
+                    <span className="body-font font-medium">Gallery</span>
+                    {uploadedCount > 0 && (
+                      <span className="ml-1 px-2 py-0.5 bg-white/20 rounded-full text-xs">
+                        {uploadedCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Tab Content */}
+              <AnimatePresence mode="wait">
+                {activeTab === 'upload' ? (
+                  <motion.div
+                    key="upload-tab"
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 20 }}
+                  >
+                    <PhotoUpload
+                      eventId={eventId}
+                      onUploadComplete={handleUploadComplete}
+                    />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="gallery-tab"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                  >
+                    <PhotoGallery
+                      guestId={guestInfo.id}
+                      canViewAll={!!guestInfo.tableId}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           )}
 
-          {step === 'success' && (
-            <motion.div
-              key="success"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className="text-center py-20"
-            >
-              <motion.div
-                animate={{ 
-                  scale: [1, 1.2, 1],
-                  rotate: [0, 10, -10, 0]
-                }}
-                transition={{ 
-                  duration: 0.5,
-                  repeat: 2
-                }}
-                className="inline-block"
-              >
-                <div className="w-32 h-32 bg-gradient-to-r from-green-400 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <Sparkles className="w-16 h-16 text-white" />
-                </div>
-              </motion.div>
-              
-              <h2 className="text-4xl font-bold text-gray-800 mb-4">
-                Thank You! 🎉
-              </h2>
-              <p className="text-xl text-gray-600">
-                Your photos have been uploaded successfully!
-              </p>
-              <p className="text-lg text-gray-500 mt-2">
-                Redirecting you back...
-              </p>
-            </motion.div>
-          )}
         </AnimatePresence>
       </div>
 
-      {/* Footer */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 text-center bg-white/80 backdrop-blur-sm">
-        <p className="text-sm text-gray-600">
-          Having trouble? Ask the wedding staff for help 💕
+      {/* Footer - Subtle */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 text-center">
+        <p className="body-font text-xs text-[var(--text-dark)] opacity-50">
+          Having trouble? Ask the wedding staff for help
         </p>
       </div>
     </main>
