@@ -1,5 +1,0 @@
-Test file content
-{"conversation_id":"bfa402b7-46bb-4ef2-8435-971109033caa"}
-
-
-this project I have done with Warp AI, image uploading, login, QR code  function is working. please redo the UI using @UI.md.

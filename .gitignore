@@ -41,3 +41,19 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# Google Cloud credentials
+*.json
+canvas-provider-*.json
+
+# Claude Code files
+.claude/
+.mcp.json
+.playwright-mcp/
+
+# Test files and images
+*.jpg
+*.jpeg
+*.png
+*.gif
+test.txt
