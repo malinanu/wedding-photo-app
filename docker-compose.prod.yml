@@ -1,0 +1,114 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: wedding_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres123}
+      POSTGRES_DB: ${POSTGRES_DB:-wedding_photos}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    networks:
+      - wedding_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: wedding_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - wedding_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wedding_app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3002}:3000"
+    environment:
+      # Database
+      DATABASE_URL: ${DATABASE_URL}
+      
+      # Redis
+      REDIS_URL: ${REDIS_URL}
+      
+      # Application Secrets
+      JWT_SECRET: ${JWT_SECRET}
+      NEXTAUTH_SECRET: ${JWT_SECRET}
+      
+      # URLs
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      NEXTAUTH_URL: ${NEXT_PUBLIC_APP_URL}
+      
+      # Upload Configuration
+      NEXT_PUBLIC_MAX_UPLOAD_SIZE: "${MAX_UPLOAD_SIZE:-10485760}"
+      NEXT_PUBLIC_CHUNK_SIZE: "${CHUNK_SIZE:-5242880}"
+      
+      # Google Cloud Storage
+      GOOGLE_CLOUD_PROJECT_ID: ${GOOGLE_CLOUD_PROJECT_ID}
+      GOOGLE_CLOUD_BUCKET_NAME: ${GOOGLE_CLOUD_BUCKET_NAME}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-/app/credentials.json}
+      GCS_PROJECT_ID: ${GOOGLE_CLOUD_PROJECT_ID}
+      GCS_BUCKET_NAME: ${GOOGLE_CLOUD_BUCKET_NAME}
+      GCS_KEY_FILE: ${GOOGLE_APPLICATION_CREDENTIALS:-/app/credentials.json}
+      
+      # Twilio SMS
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER}
+      
+      # Node environment
+      NODE_ENV: "production"
+      
+      # Optional: Sentry
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      
+      # Optional: Analytics
+      GOOGLE_ANALYTICS_ID: ${GOOGLE_ANALYTICS_ID:-}
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - wedding_network
+    volumes:
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  wedding_network:
+    driver: bridge

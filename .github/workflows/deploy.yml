@@ -1,0 +1,146 @@
+name: Deploy to Oracle Server
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Generate Prisma Client
+      run: npx prisma generate
+      
+    - name: Build application
+      run: npm run build
+      
+    - name: Run tests
+      run: npm test --if-present
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup SSH
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.ORACLE_SSH_KEY }}
+        
+    - name: Deploy to Oracle Server
+      run: |
+        # Add Oracle server to known hosts
+        ssh-keyscan -H ${{ secrets.ORACLE_SERVER_HOST }} >> ~/.ssh/known_hosts
+        
+        # Create deployment script
+        cat > deploy.sh << 'EOF'
+        #!/bin/bash
+        set -e
+        
+        echo "Starting deployment..."
+        
+        # Navigate to application directory
+        cd /opt/wedding-photo-app
+        
+        # Stop existing containers
+        echo "Stopping existing containers..."
+        sudo docker-compose down || true
+        
+        # Pull latest changes
+        echo "Pulling latest changes..."
+        git fetch origin main
+        git reset --hard origin/main
+        
+        # Create environment file from secrets
+        echo "Creating environment file..."
+        cat > .env << ENVEOF
+        DATABASE_URL="${{ secrets.DATABASE_URL }}"
+        REDIS_URL="${{ secrets.REDIS_URL }}"
+        JWT_SECRET="${{ secrets.JWT_SECRET }}"
+        GOOGLE_CLOUD_PROJECT_ID="${{ secrets.GOOGLE_CLOUD_PROJECT_ID }}"
+        GOOGLE_CLOUD_BUCKET_NAME="${{ secrets.GOOGLE_CLOUD_BUCKET_NAME }}"
+        GOOGLE_APPLICATION_CREDENTIALS="/app/credentials.json"
+        TWILIO_ACCOUNT_SID="${{ secrets.TWILIO_ACCOUNT_SID }}"
+        TWILIO_AUTH_TOKEN="${{ secrets.TWILIO_AUTH_TOKEN }}"
+        TWILIO_PHONE_NUMBER="${{ secrets.TWILIO_PHONE_NUMBER }}"
+        NEXT_PUBLIC_APP_URL="${{ secrets.NEXT_PUBLIC_APP_URL }}"
+        ENVEOF
+        
+        # Create Google Cloud credentials file
+        echo "Creating Google Cloud credentials..."
+        echo '${{ secrets.GOOGLE_CLOUD_CREDENTIALS }}' > canvas-provider-468417-n9-558228f5ca25.json
+        
+        # Build and start containers
+        echo "Building and starting containers..."
+        sudo docker-compose build --no-cache
+        sudo docker-compose up -d
+        
+        # Wait for database to be ready
+        echo "Waiting for database to be ready..."
+        sleep 30
+        
+        # Run database migrations
+        echo "Running database migrations..."
+        sudo docker-compose exec -T app npx prisma db push
+        sudo docker-compose exec -T app npx prisma db seed
+        
+        # Check if containers are running
+        echo "Checking container status..."
+        sudo docker-compose ps
+        
+        echo "Deployment completed successfully!"
+        EOF
+        
+        # Make script executable
+        chmod +x deploy.sh
+        
+        # Copy deployment script to server and execute
+        scp deploy.sh ${{ secrets.ORACLE_SERVER_USER }}@${{ secrets.ORACLE_SERVER_HOST }}:/tmp/
+        ssh ${{ secrets.ORACLE_SERVER_USER }}@${{ secrets.ORACLE_SERVER_HOST }} 'bash /tmp/deploy.sh'
+        
+    - name: Health Check
+      run: |
+        echo "Performing health check..."
+        sleep 30
+        
+        # Check if the application is responding
+        response=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.ORACLE_SERVER_HOST }}:3002/ || echo "000")
+        
+        if [ "$response" = "200" ]; then
+          echo "✅ Health check passed! Application is running."
+        else
+          echo "❌ Health check failed! HTTP status: $response"
+          exit 1
+        fi
+        
+    - name: Notify Success
+      if: success()
+      run: |
+        echo "🎉 Deployment successful!"
+        echo "Application URL: http://${{ secrets.ORACLE_SERVER_HOST }}:3002"
+        echo "Admin Dashboard: http://${{ secrets.ORACLE_SERVER_HOST }}:3002/admin"
+        
+    - name: Notify Failure
+      if: failure()
+      run: |
+        echo "💥 Deployment failed!"
+        echo "Please check the logs and try again."
